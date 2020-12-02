@@ -3,9 +3,9 @@ defmodule Advent2020.Problem2 do
     defstruct min: 0, max: 0, char: nil, password: nil
   end
 
-  def run(:part1) do
+  def run(part) do
     load()
-    |> Enum.count(&is_valid?/1)
+    |> Enum.count(&is_valid?(part, &1))
   end
 
   def load() do
@@ -26,15 +26,21 @@ defmodule Advent2020.Problem2 do
     end
   end
 
-  @spec is_valid?(nil | Advent2020.Problem2.Row.t()) :: boolean
-  def is_valid?(nil), do: false
+  def is_valid?(_part, nil), do: false
 
-  def is_valid?(row = %Row{}) do
+  def is_valid?(:part1, row = %Row{}) do
     counts =
       String.graphemes(row.password)
       |> Enum.count(&(&1 == row.char))
 
     counts >= row.min && counts <= row.max
+  end
+
+  def is_valid?(:part2, row = %Row{}) do
+    graphemes = String.graphemes(row.password)
+    min_valid = Enum.at(graphemes, row.min - 1) == row.char
+    max_valid = Enum.at(graphemes, row.max - 1) == row.char
+    (min_valid && !max_valid) || (!min_valid && max_valid)
   end
 
   def to_int(val), do: Integer.parse(val) |> elem(0)
