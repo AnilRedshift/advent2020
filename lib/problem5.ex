@@ -5,6 +5,22 @@ defmodule Advent2020.Problem5 do
     |> Enum.max()
   end
 
+  def run(:part2) do
+    sorted_ids =
+      load()
+      |> Enum.map(&seat_id/1)
+      |> Enum.sort()
+
+    first = hd(sorted_ids)
+
+    # This also could be found with binary search but ... #lazy
+    Enum.with_index(sorted_ids)
+    |> Enum.find(fn {val, index} -> val - first != index end)
+    |> elem(0)
+    # subtract 1 for the first missing one
+    |> (&(&1 - 1)).()
+  end
+
   def load() do
     File.read('input5.txt')
     |> elem(1)
