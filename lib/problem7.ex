@@ -5,6 +5,12 @@ defmodule Advent2020.Problem7 do
     |> Enum.count()
   end
 
+  def run(:part2) do
+    load()
+    |> dag()
+    |> sum_dag("shiny gold bag")
+  end
+
   def load() do
     File.read('input7.txt')
     |> elem(1)
@@ -33,7 +39,7 @@ defmodule Advent2020.Problem7 do
             end
 
             [_, count, type] = match
-            [count: count, type: type]
+            [count: to_int(count), type: type]
         end
       end)
 
@@ -69,5 +75,88 @@ defmodule Advent2020.Problem7 do
       |> MapSet.to_list()
 
     contains(rest, existing_colors, all_new_colors)
+  end
+
+  def dag(inputs) do
+    {leaves, rest} =
+      Enum.split_with(inputs, fn {_bag, contains} -> match?([:no_other_bags], contains) end)
+
+    leaves =
+      Enum.map(leaves, &elem(&1, 0))
+      |> Enum.into([], &Map.new([{&1, [contains: %{}, is_root: true]}]))
+
+    dag = Enum.reduce(leaves, %{}, &merge_dags/2)
+
+    Enum.reduce(rest, dag, fn {name, contains}, dag ->
+      new_children =
+        Enum.into(contains, %{}, fn keywords ->
+          name = Keyword.fetch!(keywords, :type)
+          count = Keyword.fetch!(keywords, :count)
+          {name, count}
+        end)
+
+      new_dag = Map.put(%{}, name, contains: new_children, is_root: true)
+
+      new_dag =
+        Enum.reduce(contains, new_dag, fn child, new_dag ->
+          Map.put(new_dag, Keyword.fetch!(child, :type), contains: %{}, is_root: false)
+        end)
+
+      merge_dags(dag, new_dag)
+    end)
+  end
+
+  defp merge_dags(dest, src) do
+    roots =
+      Enum.filter(src, fn {_key, keywords} -> Keyword.fetch!(keywords, :is_root) end)
+      |> Enum.map(&elem(&1, 0))
+
+    merge_dags(dest, src, roots)
+  end
+
+  defp merge_dags(dest, _src, []), do: dest
+
+  defp merge_dags(dest, src, [src_root | roots]) do
+    new_children = Map.fetch!(src, src_root) |> Keyword.fetch!(:contains)
+
+    default_value = [contains: new_children, is_root: true]
+
+    # Update the root value
+    dest =
+      Map.update(dest, src_root, default_value, fn keywords ->
+        is_root = Keyword.fetch!(keywords, :is_root)
+        existing_children = Keyword.fetch!(keywords, :contains)
+        contains = Map.merge(existing_children, new_children, fn _k, v1, v2 -> v1 + v2 end)
+        [contains: contains, is_root: is_root]
+      end)
+
+    # Update all the corresponding children
+    dest =
+      Enum.reduce(Map.keys(new_children), dest, fn child, dest ->
+        default_value = [contains: %{}, is_root: false]
+        Map.update(dest, child, default_value, &Keyword.put(&1, :is_root, false))
+      end)
+
+    merge_dags(dest, src, Map.keys(new_children) ++ roots)
+  end
+
+  defp sum_dag(dag, name) when not :erlang.is_map_key(name, dag),
+    do: 0
+
+  defp sum_dag(dag, name) do
+    sum =
+      Map.fetch!(dag, name)
+      |> Keyword.fetch!(:contains)
+      |> Enum.map(fn {k, count} -> count + count * sum_dag(dag, k) end)
+      |> Enum.sum()
+
+    sum
+  end
+
+  defp to_int(val) do
+    case Integer.parse(val) do
+      :error -> raise ArgumentError, message: "Cannot parse #{val} to integer"
+      {int, _} -> int
+    end
   end
 end
