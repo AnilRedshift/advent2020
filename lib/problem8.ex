@@ -1,7 +1,24 @@
 defmodule Advent2020.Problem8 do
   def run(:part1) do
     program = load()
-    execute(program: program, index: 0, acc: 0, lines_run: MapSet.new())
+    {:loop, acc} = execute(program: program, index: 0, acc: 0, lines_run: MapSet.new())
+    acc
+  end
+
+  def run(:part2) do
+    program = load()
+
+    Enum.filter(program, fn {_index, {instruction, _amount}} -> instruction != "acc" end)
+    |> Enum.find_value(nil, fn {index, {instruction, amount}} ->
+      new_instruction = (instruction == "jmp" && "nop") || "jmp"
+      new_program = Map.put(program, index, {new_instruction, amount})
+
+      execute(program: new_program, index: 0, acc: 0, lines_run: MapSet.new())
+      |> case do
+        {:terminate, acc} -> acc
+        _ -> nil
+      end
+    end)
   end
 
   def load() do
@@ -18,18 +35,23 @@ defmodule Advent2020.Problem8 do
   end
 
   defp execute(program: program, index: index, acc: acc, lines_run: lines_run) do
-    if MapSet.member?(lines_run, index) do
-      acc
-    else
-      instruction = Map.fetch!(program, index)
+    cond do
+      MapSet.member?(lines_run, index) ->
+        {:loop, acc}
 
-      run_instruction(
-        program: program,
-        instruction: instruction,
-        index: index,
-        acc: acc,
-        lines_run: MapSet.put(lines_run, index)
-      )
+      index >= map_size(program) ->
+        {:terminate, acc}
+
+      true ->
+        instruction = Map.fetch!(program, index)
+
+        run_instruction(
+          program: program,
+          instruction: instruction,
+          index: index,
+          acc: acc,
+          lines_run: MapSet.put(lines_run, index)
+        )
     end
   end
 
