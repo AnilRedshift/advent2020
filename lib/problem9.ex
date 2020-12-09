@@ -4,6 +4,19 @@ defmodule Advent2020.Problem9 do
     process(preamble, prev, input)
   end
 
+  def run(:part2) do
+    {preamble, prev, input} = load()
+    target = process(preamble, prev, input)
+
+    result =
+      find_target(target: target, nums: prev ++ input, prev: [], prev_sum: 0)
+      |> Enum.sort()
+
+    smallest = hd(result)
+    largest = Enum.reverse(result) |> hd()
+    smallest + largest
+  end
+
   def load() do
     {prev, input} =
       File.read('input9.txt')
@@ -39,6 +52,26 @@ defmodule Advent2020.Problem9 do
       end)
 
     result != nil
+  end
+
+  def find_target(target: target, nums: _nums, prev: prev, prev_sum: prev_sum)
+      when prev_sum == target,
+      do: prev
+
+  def find_target(target: _target, nums: [], prev: _prev, prev_sum: _prev_sum), do: :not_found
+
+  def find_target(target: target, nums: nums, prev: prev, prev_sum: prev_sum)
+      when prev_sum < target do
+    find_target(
+      target: target,
+      nums: tl(nums),
+      prev: prev ++ [hd(nums)],
+      prev_sum: prev_sum + hd(nums)
+    )
+  end
+
+  def find_target(target: target, nums: nums, prev: prev, prev_sum: prev_sum) do
+    find_target(target: target, nums: nums, prev: tl(prev), prev_sum: prev_sum - hd(prev))
   end
 
   defp to_int(val) do
