@@ -1,9 +1,9 @@
 defmodule Advent2020.Problem11 do
-  def run(:part1) do
+  def run(part) do
     seat_map = load()
-    next_seat_map = flip_seats(seat_map)
+    next_seat_map = flip_seats(part, seat_map)
 
-    stabilize(next_seat_map, seat_map)
+    stabilize(part, next_seat_map, seat_map)
     |> Map.values()
     |> Enum.count(&(&1 == :occupied))
   end
@@ -37,28 +37,28 @@ defmodule Advent2020.Problem11 do
     end)
   end
 
-  defp stabilize(seat_map, prev_seat_map) when seat_map == prev_seat_map, do: seat_map
+  defp stabilize(_part, seat_map, prev_seat_map) when seat_map == prev_seat_map, do: seat_map
 
-  defp stabilize(seat_map, _prev_seat_map) do
-    next_seat_map = flip_seats(seat_map)
-    stabilize(next_seat_map, seat_map)
+  defp stabilize(part, seat_map, _prev_seat_map) do
+    next_seat_map = flip_seats(part, seat_map)
+    stabilize(part, next_seat_map, seat_map)
   end
 
-  defp flip_seats(seat_map) do
+  defp flip_seats(part, seat_map) do
     Map.keys(seat_map)
     |> Enum.reduce(seat_map, fn pos, new_seat_map ->
-      case flip(seat_map, pos) do
+      case flip(part, seat_map, pos) do
         nil -> new_seat_map
         val -> Map.put(new_seat_map, pos, val)
       end
     end)
   end
 
-  defp flip(seat_map, pos), do: flip(seat_map, pos, Map.get(seat_map, pos))
-  def flip(_seat_map, _pos, state) when state in [nil, :floor], do: nil
+  defp flip(part, seat_map, pos), do: flip(part, seat_map, pos, Map.get(seat_map, pos))
+  def flip(_part, _seat_map, _pos, state) when state in [nil, :floor], do: nil
 
-  def flip(seat_map, pos, :empty) do
-    adjacent(pos)
+  def flip(part, seat_map, pos, :empty) do
+    adjacent(part, seat_map, pos)
     |> Enum.any?(&(Map.get(seat_map, &1) == :occupied))
     |> case do
       true ->
@@ -69,26 +69,58 @@ defmodule Advent2020.Problem11 do
     end
   end
 
-  def flip(seat_map, pos, :occupied) do
+  def flip(part, seat_map, pos, :occupied) do
     adjacent_occupied =
-      adjacent(pos)
+      adjacent(part, seat_map, pos)
       |> Enum.count(&(Map.get(seat_map, &1) == :occupied))
 
-    if adjacent_occupied >= 4 do
+    tolerance = (part == :part1 && 4) || 5
+
+    if adjacent_occupied >= tolerance do
       :empty
     else
       nil
     end
   end
 
-  # If a seat is occupied (#) and four or more seats adjacent to it are also occupied, the seat becomes empty.
-
-  defp adjacent({x, y}) do
+  defp adjacent(:part1, _seat_map, {x, y}) do
     Enum.flat_map([x - 1, x, x + 1], fn x ->
       Enum.map([y - 1, y, y + 1], fn y -> {x, y} end)
     end)
     |> Enum.reject(&(&1 == {x, y}))
   end
+
+  defp adjacent(:part2, seat_map, {x, y}) do
+    Enum.flat_map([-1, 0, 1], fn dx ->
+      Enum.map([-1, 0, 1], fn dy ->
+        if dx == 0 and dy == 0 do
+          nil
+        else
+          fn {x, y} ->
+            {x + dx, y + dy}
+          end
+        end
+      end)
+    end)
+    |> Enum.reject(&(&1 == nil))
+    |> Enum.map(fn angle_fn ->
+      pos = angle_fn.({x, y})
+      process_angle(seat_map, pos, angle_fn)
+    end)
+    |> Enum.reject(&(&1 == nil))
+  end
+
+  defp process_angle(seat_map, pos, angle_fn),
+    do: process_angle(seat_map, pos, angle_fn, Map.get(seat_map, pos))
+
+  defp process_angle(_seat_map, _pos, _angle_fn, nil), do: nil
+
+  defp process_angle(seat_map, pos, angle_fn, :floor) do
+    next_pos = angle_fn.(pos)
+    process_angle(seat_map, next_pos, angle_fn)
+  end
+
+  defp process_angle(_seat_map, pos, _angle_fn, _state), do: pos
 
   defp print_seat_map(seat_map) do
     {all_x, all_y} =
