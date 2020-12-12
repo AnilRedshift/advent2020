@@ -6,6 +6,13 @@ defmodule Advent2020.Problem12 do
     |> manhattan()
   end
 
+  def run(:part2) do
+    commands = load()
+
+    move(commands: commands, waypoint: {1, 10}, pos: {0, 0})
+    |> manhattan()
+  end
+
   def load() do
     File.read('input12.txt')
     |> elem(1)
@@ -29,6 +36,7 @@ defmodule Advent2020.Problem12 do
     {command, to_int(amount)}
   end
 
+  # part 1
   defp move(commands: [], pos: pos, bearing: _bearing), do: pos
 
   defp move(commands: [{:north, amount} | rest], pos: {ns, ew}, bearing: bearing) do
@@ -65,6 +73,67 @@ defmodule Advent2020.Problem12 do
   defp move(commands: [{:forward, amount} | rest], pos: pos, bearing: bearing) do
     move(commands: [{bearing, amount} | rest], pos: pos, bearing: bearing)
   end
+
+  # part2
+  defp move(commands: [], waypoint: _waypoint, pos: pos), do: pos
+
+  defp move(
+         commands: [{:north, amount} | rest],
+         waypoint: {ns, ew},
+         pos: pos
+       ) do
+    move(commands: rest, waypoint: {ns + amount, ew}, pos: pos)
+  end
+
+  defp move(
+         commands: [{:south, amount} | rest],
+         waypoint: {ns, ew},
+         pos: pos
+       ) do
+    move(commands: rest, waypoint: {ns - amount, ew}, pos: pos)
+  end
+
+  defp move(
+         commands: [{:east, amount} | rest],
+         waypoint: {ns, ew},
+         pos: pos
+       ) do
+    move(commands: rest, waypoint: {ns, ew + amount}, pos: pos)
+  end
+
+  defp move(
+         commands: [{:west, amount} | rest],
+         waypoint: {ns, ew},
+         pos: pos
+       ) do
+    move(commands: rest, waypoint: {ns, ew - amount}, pos: pos)
+  end
+
+  defp move(
+         commands: [{command, amount} | rest],
+         waypoint: waypoint,
+         pos: pos
+       )
+       when command in [:left, :right] do
+    count = rem(floor(amount / 90), 4)
+    new_waypoint = move_waypoint(waypoint, command, count)
+    move(commands: rest, waypoint: new_waypoint, pos: pos)
+  end
+
+  defp move(
+         commands: [{:forward, amount} | rest],
+         waypoint: {waypoint_ns, waypoint_ew},
+         pos: {ns, ew}
+       ) do
+    pos = {amount * waypoint_ns + ns, amount * waypoint_ew + ew}
+    move(commands: rest, waypoint: {waypoint_ns, waypoint_ew}, pos: pos)
+  end
+
+  defp move_waypoint(waypoint, _direction, 0), do: waypoint
+
+  defp move_waypoint({ns, ew}, :right, count), do: move_waypoint({-ew, ns}, :right, count - 1)
+
+  defp move_waypoint({ns, ew}, :left, count), do: move_waypoint({ew, -ns}, :left, count - 1)
 
   defp manhattan({ns, ew}), do: abs(ns) + abs(ew)
 
