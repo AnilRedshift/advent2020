@@ -1,8 +1,8 @@
 defmodule Advent2020.Problem14 do
-  def run(:part1) do
+  def run(part) do
     commands = load()
 
-    execute(commands: commands, bitmask: nil, mem: %{})
+    execute(part: part, commands: commands, bitmask: nil, mem: %{})
     |> Map.values()
     |> Enum.sum()
   end
@@ -15,33 +15,94 @@ defmodule Advent2020.Problem14 do
     |> Enum.map(&parse/1)
   end
 
-  def execute(commands: [], bitmask: _bitmask, mem: mem), do: mem
+  def execute(part: _part, commands: [], bitmask: _bitmask, mem: mem), do: mem
 
-  def execute(commands: [{:mask, new_bitmask} | rest], bitmask: _bitmask, mem: mem) do
-    execute(commands: rest, bitmask: new_bitmask, mem: mem)
+  def execute(part: part, commands: [{:mask, new_bitmask} | rest], bitmask: _bitmask, mem: mem) do
+    execute(part: part, commands: rest, bitmask: new_bitmask, mem: mem)
   end
 
-  def execute(commands: [{:write, {address, value}} | rest], bitmask: bitmask, mem: mem) do
-    value = apply_bitmask(bitmask, value)
+  def execute(
+        part: :part1,
+        commands: [{:write, {address, value}} | rest],
+        bitmask: bitmask,
+        mem: mem
+      ) do
+    value = apply_bitmask(:part1, bitmask, value)
     mem = Map.put(mem, address, value)
-    execute(commands: rest, bitmask: bitmask, mem: mem)
+    execute(part: :part1, commands: rest, bitmask: bitmask, mem: mem)
   end
 
-  def apply_bitmask(bitmask, value) do
-    bitmask_padding = Stream.cycle([:x]) |> Stream.take(36)
-    value_padding = Stream.cycle([0]) |> Stream.take(36)
+  def execute(
+        part: :part2,
+        commands: [{:write, {address, value}} | rest],
+        bitmask: bitmask,
+        mem: mem
+      ) do
+    addresses = apply_bitmask(:part2, bitmask, address)
+    mem = Enum.reduce(addresses, mem, fn address, mem -> Map.put(mem, address, value) end)
+    execute(part: :part2, commands: rest, bitmask: bitmask, mem: mem)
+  end
 
-    reverse_bitmask = Enum.reverse(bitmask) |> Stream.concat(bitmask_padding)
-    reverse_bits = Integer.digits(value, 2) |> Enum.reverse() |> Stream.concat(value_padding)
+  def apply_bitmask(:part1, bitmask, value) do
+    bitmask_padding = Stream.cycle([:x])
+    value_padding = Stream.cycle([0])
+
+    reverse_bitmask =
+      Enum.reverse(bitmask)
+      |> Stream.concat(bitmask_padding)
+      |> Stream.take(36)
+
+    reverse_bits =
+      Integer.digits(value, 2)
+      |> Enum.reverse()
+      |> Stream.concat(value_padding)
+      |> Stream.take(36)
 
     Enum.zip(reverse_bits, reverse_bitmask)
     |> Enum.map(fn
+      {_bit, 0} -> 0
+      {_bit, 1} -> 1
       {bit, :x} -> bit
-      {_bit, val} -> val
     end)
     |> Enum.reverse()
     |> Enum.join()
     |> to_int(2)
+  end
+
+  def apply_bitmask(:part2, bitmask, address) do
+    bitmask_padding = Stream.cycle([0])
+    address_padding = Stream.cycle([0])
+
+    reverse_bitmask =
+      Enum.reverse(bitmask)
+      |> Stream.concat(bitmask_padding)
+      |> Stream.take(36)
+
+    reverse_bits =
+      Integer.digits(address, 2)
+      |> Enum.reverse()
+      |> Stream.concat(address_padding)
+      |> Stream.take(36)
+
+    reverse_address_with_mask =
+      Enum.zip(reverse_bits, reverse_bitmask)
+      |> Enum.map(fn
+        {bit, 0} -> bit
+        {_bit, 1} -> 1
+        {_bit, :x} -> :x
+      end)
+
+    Enum.reduce(reverse_address_with_mask, [[]], fn
+      :x, addresses ->
+        with_zeros = Enum.map(addresses, &[0 | &1])
+        with_ones = Enum.map(addresses, &[1 | &1])
+        with_zeros ++ with_ones
+
+      val, addresses ->
+        Enum.map(addresses, &[val | &1])
+    end)
+    |> Enum.map(&Enum.join/1)
+    |> Enum.map(&to_int(&1, 2))
   end
 
   defp parse("mask = " <> binary) do
