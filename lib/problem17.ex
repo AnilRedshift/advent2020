@@ -1,11 +1,11 @@
 defmodule Advent2020.Problem17 do
-  def run(:part1) do
-    load()
+  def run(part) do
+    load(part)
     |> cycle(0)
     |> Enum.count()
   end
 
-  def load() do
+  def load(part) do
     File.read('input17.txt')
     |> elem(1)
     |> String.split("\n")
@@ -17,7 +17,10 @@ defmodule Advent2020.Problem17 do
       |> Enum.map(fn {val, x} -> {{x, y}, val} end)
     end)
     |> Enum.reject(fn {_pos, val} -> val == :inactive end)
-    |> Enum.map(fn {{x, y}, _val} -> {x, y, 0} end)
+    |> Enum.map(fn
+      {{x, y}, _val} when part == :part1 -> {x, y, 0}
+      {{x, y}, _val} when part == :part2 -> {x, y, 0, 0}
+    end)
     |> MapSet.new()
   end
 
@@ -34,7 +37,6 @@ defmodule Advent2020.Problem17 do
   defp cycle(grid, count) do
     Enum.flat_map(grid, &neighbors/1)
     |> MapSet.new()
-    |> MapSet.union(grid)
     |> Enum.map(fn pos ->
       active_neighbors =
         neighbors(pos)
@@ -62,5 +64,16 @@ defmodule Advent2020.Problem17 do
     end)
     |> List.flatten()
     |> Enum.reject(&(&1 == {x, y, z}))
+  end
+
+  defp neighbors({x, y, z, w}) do
+    # we don't want to exclude the 3d point, as it doesn't account for w
+    xyz_coords = [{x, y, z} | neighbors({x, y, z})]
+
+    Enum.map(xyz_coords, fn {new_x, new_y, new_z} ->
+      Enum.map((w - 1)..(w + 1), fn new_w -> {new_x, new_y, new_z, new_w} end)
+    end)
+    |> List.flatten()
+    |> Enum.reject(&(&1 == {x, y, z, w}))
   end
 end
