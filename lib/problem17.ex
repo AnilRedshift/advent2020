@@ -1,7 +1,8 @@
 defmodule Advent2020.Problem17 do
   def run(part) do
-    load(part)
-    |> cycle(0)
+    grid = load(part)
+
+    Enum.reduce(0..5, grid, fn _, grid -> cycle(grid) end)
     |> Enum.count()
   end
 
@@ -32,9 +33,7 @@ defmodule Advent2020.Problem17 do
     end)
   end
 
-  defp cycle(grid, 6), do: grid
-
-  defp cycle(grid, count) do
+  defp cycle(grid) do
     Enum.flat_map(grid, &neighbors/1)
     |> MapSet.new()
     |> Enum.map(fn pos ->
@@ -53,7 +52,6 @@ defmodule Advent2020.Problem17 do
         MapSet.delete(new_grid, pos)
       end
     end)
-    |> cycle(count + 1)
   end
 
   defp neighbors({x, y, z}) do
@@ -70,10 +68,9 @@ defmodule Advent2020.Problem17 do
     # we don't want to exclude the 3d point, as it doesn't account for w
     xyz_coords = [{x, y, z} | neighbors({x, y, z})]
 
-    Enum.map(xyz_coords, fn {new_x, new_y, new_z} ->
+    Enum.flat_map(xyz_coords, fn {new_x, new_y, new_z} ->
       Enum.map((w - 1)..(w + 1), fn new_w -> {new_x, new_y, new_z, new_w} end)
     end)
-    |> List.flatten()
     |> Enum.reject(&(&1 == {x, y, z, w}))
   end
 end
