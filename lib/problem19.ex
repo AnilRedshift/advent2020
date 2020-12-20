@@ -4,6 +4,16 @@ defmodule Advent2020.Problem19 do
     Enum.count(messages, &validate_message(&1, rules))
   end
 
+  def run(:part2) do
+    {rules, messages} = load()
+
+    rules =
+      Map.put(rules, 8, {:sub_rules, [[42], [42, 8]]})
+      |> Map.put(11, {:sub_rules, [[42, 31], [42, 11, 31]]})
+
+    Enum.count(messages, &validate_message(&1, rules))
+  end
+
   def load() do
     [rules, messages] =
       File.read('input19.txt')
@@ -58,33 +68,28 @@ defmodule Advent2020.Problem19 do
     end
   end
 
-  defp validate_message("", _rules, _rule), do: ""
-
-  defp validate_message(<<c::utf8>> <> remaining_message, _rules, {:char, char}) when c == char do
-    # IO.inspect("validate char '#{char}' succeeded. remaining message is #{remaining_message}",
-    #   binaries: :as_strings
-    # )
-
+  defp validate_message(<<c::utf8>> <> remaining_message, _rules, {:char, char})
+       when c == char do
     remaining_message
   end
 
-  defp validate_message(message, _rules, {:char, c}) do
-    # IO.inspect("Validate char '#{c}' for message #{message} FAILED", binaries: :as_strings)
+  defp validate_message(_message, _rules, {:char, _c}) do
     nil
   end
 
   defp validate_message(message, rules, {:sub_rules, sub_rules}) do
-    # IO.inspect("validate sub_rules for #{message}")
-    # IO.inspect(sub_rules, binaries: :as_strings)
-
     Enum.find_value(sub_rules, fn sub_rule ->
-      Enum.reduce_while(sub_rule, message, fn index, message ->
-        new_rule = Map.fetch!(rules, index)
+      Enum.reduce_while(sub_rule, message, fn
+        _, message when message in [nil, ""] ->
+          {:halt, nil}
 
-        case validate_message(message, rules, new_rule) do
-          :invalid -> {:halt, nil}
-          remaining_message -> {:cont, remaining_message}
-        end
+        index, message ->
+          new_rule = Map.fetch!(rules, index)
+
+          case validate_message(message, rules, new_rule) do
+            nil -> {:halt, nil}
+            remaining_message -> {:cont, remaining_message}
+          end
       end)
     end)
   end
