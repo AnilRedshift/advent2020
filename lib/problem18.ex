@@ -1,14 +1,8 @@
 defmodule Advent2020.Problem18 do
-  def run(:part1) do
-    load()
-    |> Enum.map(&execute/1)
-    |> Enum.sum()
-  end
+  def run(part) do
+    lines = load()
 
-  def run(:part2) do
-    load()
-    |> Enum.map(&add_parens/1)
-    |> Enum.map(&execute/1)
+    Enum.map(lines, &execute(%{tokens: &1, part: part}))
     |> Enum.sum()
   end
 
@@ -39,98 +33,125 @@ defmodule Advent2020.Problem18 do
     end
   end
 
-  defp execute(commands), do: execute(commands, stack: [])
+  defp execute(args) do
+    # IO.inspect(Map.get(args, :stack, []))
 
-  defp execute([], stack: [{:result, result}]), do: result
-
-  defp execute(commands, stack: [{:result, b}, {:plus, a} | stack]) do
-    execute(commands, stack: [{:result, a + b} | stack])
+    Map.merge(%{is_unbalanced: false, stack: []}, args)
+    |> execute_internal()
   end
 
-  defp execute(commands, stack: [{:result, b}, {:mul, a} | stack]) do
-    execute(commands, stack: [{:result, a * b} | stack])
+  defp execute_internal(%{tokens: [], stack: [num: result]}), do: result
+
+  defp execute_internal(%{tokens: [], stack: stack, is_unbalanced: true} = args) do
+    # If we got to the end without balancing parens, then they all belong at the end
+
+    right_parens = for {:left_paren, :unbalanced} <- stack, do: :right_paren
+
+    stack =
+      Enum.map(stack, fn
+        {:left_paren, :unbalanced} -> {:left_paren, :balanced}
+        a -> a
+      end)
+
+    Map.merge(args, %{tokens: right_parens, stack: stack, is_unbalanced: false})
+    |> execute()
   end
 
-  defp execute([{:num, b} | rest], stack: [{:plus, a} | stack]) do
-    execute(rest, stack: [{:result, a + b} | stack])
+  defp execute_internal(
+         %{
+           stack: [{:num, b}, {:plus, a} | remaining_stack]
+         } = args
+       ) do
+    # When the stack contains +3, and we just put on 4 to the stack, reduce the stack
+    Map.merge(args, %{stack: [{:num, a + b} | remaining_stack]})
+    |> execute()
   end
 
-  defp execute([{:num, b} | rest], stack: [{:mul, a} | stack]) do
-    execute(rest, stack: [{:result, a * b} | stack])
+  defp execute_internal(
+         %{
+           tokens: [operand | _],
+           stack: [{:num, b}, {:mul, a} | remaining_stack]
+         } = args
+       )
+       when operand != :plus do
+    # When the stack contains *3, and we just put on 4 to the stack, reduce the stack
+    Map.merge(args, %{stack: [{:num, a * b} | remaining_stack]})
+    |> execute()
   end
 
-  defp execute([{:num, num}, operand | rest], stack: stack) when operand in [:plus, :mul] do
-    execute(rest, stack: [{operand, num} | stack])
+  defp execute_internal(
+         %{
+           tokens: [],
+           stack: [{:num, b}, {:mul, a} | remaining_stack]
+         } = args
+       ) do
+    # When the very last command is 3 * 4, it's safe to execute
+    Map.merge(args, %{stack: [{:num, a * b} | remaining_stack]})
+    |> execute()
   end
 
-  defp execute([operand | rest], stack: [{:result, result} | stack])
+  defp execute_internal(%{tokens: [:left_paren | remaining_tokens], stack: stack} = args) do
+    # New left-parens push the stack down, e.g (4
+    Map.merge(args, %{tokens: remaining_tokens, stack: [{:left_paren, :balanced} | stack]})
+    |> execute()
+  end
+
+  defp execute_internal(
+         %{
+           tokens: [:right_paren | remaining_tokens],
+           stack: [{:num, num}, {:left_paren, :balanced} | remaining_stack]
+         } = args
+       ) do
+    # When the stack contains (4 and we get a closing right paren, turn (4) -> 4
+    Map.merge(args, %{tokens: remaining_tokens, stack: [{:num, num} | remaining_stack]})
+    |> execute()
+  end
+
+  defp execute_internal(
+         %{
+           tokens: [{:num, num}, :plus | remaining_tokens],
+           stack: [{:mul, _} | _] = stack,
+           part: :part2
+         } = args
+       ) do
+    # For 3 * 4 + 1, and we have :mul, 3 in the stack, we don't want to add 4 here, since that has precedence
+    # Instead, insert a paren, so it becomes 3 * (4 +
+    Map.merge(args, %{
+      tokens: remaining_tokens,
+      stack: [{:plus, num}, {:left_paren, :unbalanced} | stack],
+      is_unbalanced: true
+    })
+    |> execute()
+  end
+
+  defp execute_internal(
+         %{
+           tokens: [operand | _],
+           stack: [{:num, num}, {:left_paren, :unbalanced} | remaining_stack],
+           is_unbalanced: true
+         } = args
+       )
+       when operand in [:mul, :right_paren] do
+    # We've found a place to insert a right paren to balance out a previous left paren
+    # E.g. 1 * 2 + 3 * 4 -> becomes [num: 5 ,mul: 1] after the 2 + 3. When we see the next *, we can capture the 1 * 5
+    is_unbalanced = Enum.any?(remaining_stack, &(&1 == {:left_paren, :unbalanced}))
+
+    Map.merge(args, %{stack: [{:num, num} | remaining_stack], is_unbalanced: is_unbalanced})
+    |> execute()
+  end
+
+  defp execute_internal(
+         %{tokens: [operand | remaining_tokens], stack: [{:num, num} | remaining_stack]} = args
+       )
        when operand in [:plus, :mul] do
-    execute(rest, stack: [{operand, result} | stack])
+    # When the token is + or *, and the stack contains the LHV, bind them together. E.g 3 + becomes {:plus, 3}
+    Map.merge(args, %{tokens: remaining_tokens, stack: [{operand, num} | remaining_stack]})
+    |> execute()
   end
 
-  defp execute([:left_paren | rest], stack: stack) do
-    execute(rest, stack: [:left_paren | stack])
-  end
-
-  defp execute([:right_paren | rest], stack: [:left_paren | stack]) do
-    execute(rest, stack: stack)
-  end
-
-  defp execute([:right_paren | rest], stack: [{:result, result}, :left_paren | stack]) do
-    execute(rest, stack: [{:result, result} | stack])
-  end
-
-  defp execute([{:num, num} | rest], stack: stack) do
-    execute(rest, stack: [{:result, num} | stack])
-  end
-
-  defp add_parens(commands) do
-    add_parens(commands, parens: [])
-  end
-
-  defp add_parens([], parens: [:new_left_paren | parens]) do
-    [:right_paren | add_parens([], parens: parens)]
-  end
-
-  defp add_parens([], parens: []), do: []
-
-  defp add_parens([:left_paren | rest], parens: parens) do
-    [:left_paren | add_parens(rest, parens: [:left_paren | parens])]
-  end
-
-  defp add_parens([command | _] = commands, parens: [:new_left_paren | parens])
-       when command in [:right_paren, :mul] do
-    [:right_paren | add_parens(commands, parens: parens)]
-  end
-
-  defp add_parens([:right_paren | rest], parens: [:left_paren | parens]) do
-    [:right_paren | add_parens(rest, parens: parens)]
-  end
-
-  defp add_parens([:mul, {:num, b}, :plus, {:num, c} | rest], parens: parens) do
-    [
-      :mul,
-      :left_paren,
-      {:num, b},
-      :plus,
-      {:num, c}
-      | add_parens(rest, parens: [:new_left_paren | parens])
-    ]
-  end
-
-  defp add_parens([:mul, {:num, b}, :plus, :left_paren | rest], parens: parens) do
-    [
-      :mul,
-      :left_paren,
-      {:num, b},
-      :plus,
-      :left_paren
-      | add_parens(rest, parens: [:left_paren, :new_left_paren | parens])
-    ]
-  end
-
-  defp add_parens([command | rest], parens: parens) do
-    [command | add_parens(rest, parens: parens)]
+  defp execute_internal(%{tokens: [{:num, num} | remaining_tokens], stack: stack} = args) do
+    Map.merge(args, %{tokens: remaining_tokens, stack: [{:num, num} | stack]})
+    |> execute()
   end
 
   defp to_int(val, base \\ 10) do
