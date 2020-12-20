@@ -5,6 +5,13 @@ defmodule Advent2020.Problem18 do
     |> Enum.sum()
   end
 
+  def run(:part2) do
+    load()
+    |> Enum.map(&add_parens/1)
+    |> Enum.map(&execute/1)
+    |> Enum.sum()
+  end
+
   def load() do
     File.read('input18.txt')
     |> elem(1)
@@ -75,6 +82,55 @@ defmodule Advent2020.Problem18 do
 
   defp execute([{:num, num} | rest], stack: stack) do
     execute(rest, stack: [{:result, num} | stack])
+  end
+
+  defp add_parens(commands) do
+    add_parens(commands, parens: [])
+  end
+
+  defp add_parens([], parens: [:new_left_paren | parens]) do
+    [:right_paren | add_parens([], parens: parens)]
+  end
+
+  defp add_parens([], parens: []), do: []
+
+  defp add_parens([:left_paren | rest], parens: parens) do
+    [:left_paren | add_parens(rest, parens: [:left_paren | parens])]
+  end
+
+  defp add_parens([command | _] = commands, parens: [:new_left_paren | parens])
+       when command in [:right_paren, :mul] do
+    [:right_paren | add_parens(commands, parens: parens)]
+  end
+
+  defp add_parens([:right_paren | rest], parens: [:left_paren | parens]) do
+    [:right_paren | add_parens(rest, parens: parens)]
+  end
+
+  defp add_parens([:mul, {:num, b}, :plus, {:num, c} | rest], parens: parens) do
+    [
+      :mul,
+      :left_paren,
+      {:num, b},
+      :plus,
+      {:num, c}
+      | add_parens(rest, parens: [:new_left_paren | parens])
+    ]
+  end
+
+  defp add_parens([:mul, {:num, b}, :plus, :left_paren | rest], parens: parens) do
+    [
+      :mul,
+      :left_paren,
+      {:num, b},
+      :plus,
+      :left_paren
+      | add_parens(rest, parens: [:left_paren, :new_left_paren | parens])
+    ]
+  end
+
+  defp add_parens([command | rest], parens: parens) do
+    [command | add_parens(rest, parens: parens)]
   end
 
   defp to_int(val, base \\ 10) do
