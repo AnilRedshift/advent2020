@@ -93,20 +93,8 @@ defmodule Advent2020.LinkedMap do
     %LinkedMap{map | data: data, head: key}
   end
 
-  def append(%LinkedMap{tail: nil}, key) do
-    LinkedMap.new([key])
-  end
-
-  def append(%LinkedMap{data: data, head: head}, key) when map_size(data) == 1 do
-    LinkedMap.new([key, head])
-  end
-
-  def append(%LinkedMap{data: data, tail: tail} = map, key) do
-    data =
-      Map.update!(data, tail, fn {prev, nil} -> {prev, key} end)
-      |> Map.put(key, {tail, nil})
-
-    %LinkedMap{map | data: data, tail: key}
+  def append(%LinkedMap{tail: tail} = map, key) do
+    insert_after(map, tail, key)
   end
 
   def insert_after(%LinkedMap{head: nil}, nil, key),
