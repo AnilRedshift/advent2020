@@ -5,6 +5,15 @@ defmodule Advent2020.Problem24 do
     |> Enum.count()
   end
 
+  def run(:part2) do
+    grid =
+      load()
+      |> Enum.reduce(%{}, &flip/2)
+
+    game_of_life(%{grid: grid, day: 0, max_days: 100})
+    |> Enum.count()
+  end
+
   def load() do
     File.read('input24.txt')
     |> elem(1)
@@ -76,5 +85,50 @@ defmodule Advent2020.Problem24 do
 
   defp flip([:northeast | directions], grid, {x, y}) do
     flip(directions, grid, {x + 1, y + 1})
+  end
+
+  defp game_of_life(%{grid: grid, day: day, max_days: max_days}) when day == max_days do
+    grid
+  end
+
+  defp game_of_life(%{grid: grid, day: day} = args) do
+    grid =
+      Map.keys(grid)
+      |> Enum.flat_map(&neighbors/1)
+      |> MapSet.new()
+      |> MapSet.union(MapSet.new(Map.keys(grid)))
+      |> Enum.map(fn pos -> {pos, Map.get(grid, pos, :white)} end)
+      |> Enum.map(fn {pos, value} ->
+        neighbor_count = Enum.count(neighbors(pos), &Map.has_key?(grid, &1))
+        {pos, value, neighbor_count}
+      end)
+      |> Enum.reduce(grid, fn
+        {pos, :black, neighbor_count}, new_grid ->
+          if neighbor_count in [0, 3, 4, 5, 6] do
+            Map.delete(new_grid, pos)
+          else
+            new_grid
+          end
+
+        {pos, :white, neighbor_count}, new_grid ->
+          if neighbor_count == 2 do
+            Map.put(new_grid, pos, :black)
+          else
+            new_grid
+          end
+      end)
+
+    game_of_life(%{args | grid: grid, day: day + 1})
+  end
+
+  defp neighbors({x, y}) do
+    [
+      {x + 2, y},
+      {x - 2, y},
+      {x + 1, y + 1},
+      {x + 1, y - 1},
+      {x - 1, y + 1},
+      {x - 1, y - 1}
+    ]
   end
 end
