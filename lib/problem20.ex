@@ -1,25 +1,31 @@
 defmodule Advent2020.Problem20 do
   @tile_length 10
+
   def run(:part1) do
-    tiles = load()
+    encoded_tiles =
+      load()
+      |> Enum.map(fn {name, tile} ->
+        {name, get_encoded_orientations(tile)}
+      end)
+      |> Enum.into(%{})
 
-    board_width = floor(:math.sqrt(Enum.count(tiles)))
+    encoding_map = create_encoding_map(encoded_tiles)
 
-    solve(tiles, %{}, board_width, 0, 0)
-    |> case do
-      nil ->
-        nil
+    top_left =
+      find_possible_corners(
+        encoded_tiles: encoded_tiles,
+        encoding_map: encoding_map,
+        pos: {:top, :left}
+      )
 
-      grid ->
-        [
-          {0, 0},
-          {board_width - 1, 0},
-          {0, board_width - 1},
-          {board_width - 1, board_width - 1}
-        ]
-        |> Enum.map(&Map.fetch!(grid, &1))
-        |> Enum.map(&elem(&1, 0))
-        |> Enum.sum()
+    # Because you can rotate the tiles right, there are 4 identical permutations
+    # Therefore, there should be 4 tiles that match the top left corner, which in
+    # actuality are the 4 tiles for each corner
+    if Enum.count(top_left) == 4 do
+      Enum.map(top_left, &elem(&1, 0))
+      |> Enum.reduce(fn a, b -> a * b end)
+    else
+      nil
     end
   end
 
@@ -62,46 +68,8 @@ defmodule Advent2020.Problem20 do
     end
   end
 
-  defp solve([], grid, _board_width, _x, _y), do: grid
-
-  defp solve(tiles, grid, board_width, x, y) do
-    Enum.find_value(tiles, fn {name, tile} ->
-      get_valid_tiles(grid, tile, x, y)
-      |> Enum.find_value(fn tile ->
-        grid = Map.put(grid, {x, y}, {name, tile})
-        tiles = Enum.reject(tiles, fn {n, _} -> name == n end)
-        last_in_row = x == board_width - 1
-        x = (last_in_row && 0) || x + 1
-        y = (last_in_row && y + 1) || y
-        solve(tiles, grid, board_width, x, y)
-      end)
-    end)
-  end
-
-  defp get_tile(grid, x, y) do
-    case Map.get(grid, {x, y}) do
-      nil -> nil
-      {_name, tile} -> tile
-    end
-  end
-
-  defp get_valid_tiles(grid, tile, x, y) do
-    get_orientations(tile)
-    |> Enum.filter(fn tile ->
-      tile_to_left = get_tile(grid, x - 1, y)
-      tile_to_right = get_tile(grid, x + 1, y)
-      tile_above = get_tile(grid, x, y + 1)
-      tile_below = get_tile(grid, x, y - 1)
-
-      (!tile_to_left or can_connect(tile_to_left, tile, :right)) and
-        (!tile_to_right or can_connect(tile_to_right, tile, :left)) and
-        (!tile_above or can_connect(tile_above, tile, :bottom)) and
-        (!tile_below or can_connect(tile_below, tile, :top))
-    end)
-  end
-
   defp get_orientations(tile) do
-    Enum.reduce(0..3, [tile], fn _, [tile | tiles] ->
+    Enum.reduce(1..3, [tile], fn _, [tile | tiles] ->
       new_tile = rotate_right(tile)
       [new_tile, tile | tiles]
     end)
@@ -110,21 +78,66 @@ defmodule Advent2020.Problem20 do
     end)
   end
 
-  defp can_connect(tile1, tile2, :right) do
-    Enum.all?(0..(@tile_length - 1), fn y ->
-      Map.fetch!(tile1, {@tile_length - 1, y}) == Map.fetch!(tile2, {0, y})
+  defp encode_tile(tile) do
+    for i <- 0..(@tile_length - 1) do
+      [
+        top: Map.fetch!(tile, {i, 0}),
+        bottom: Map.fetch!(tile, {i, @tile_length - 1}),
+        left: Map.fetch!(tile, {0, i}),
+        right: Map.fetch!(tile, {@tile_length - 1, i})
+      ]
+    end
+    |> Enum.reverse()
+    |> Enum.reduce(%{top: [], bottom: [], left: [], right: []}, fn row, acc ->
+      Enum.reduce([:top, :bottom, :left, :right], acc, fn key, acc ->
+        Map.update!(acc, key, fn vals -> [Keyword.fetch!(row, key) | vals] end)
+      end)
+    end)
+    |> Enum.map(fn {direction, vals} ->
+      encoding =
+        Enum.map(vals, &((&1 && 1) || 0))
+        |> Integer.undigits(2)
+
+      {direction, encoding}
     end)
   end
 
-  defp can_connect(tile1, tile2, :left), do: can_connect(tile2, tile1, :right)
+  defp get_encoded_orientations(tile) do
+    get_orientations(tile)
+    |> Enum.map(&encode_tile/1)
+    |> Enum.uniq()
+  end
 
-  defp can_connect(tile1, tile2, :top) do
-    Enum.all?(0..(@tile_length - 1), fn x ->
-      Map.fetch!(tile1, {x, 0}) == Map.fetch!(tile2, {x, @tile_length - 1})
+  defp create_encoding_map(encoded_tiles) do
+    Enum.reduce(encoded_tiles, %{}, fn {name, orientations}, acc ->
+      Enum.reduce(orientations, acc, fn orientation, acc ->
+        Enum.unzip(orientation)
+        |> elem(1)
+        |> Enum.reduce(acc, fn encoding, acc ->
+          Map.update(acc, encoding, MapSet.new([name]), &MapSet.put(&1, name))
+        end)
+      end)
     end)
   end
 
-  defp can_connect(tile1, tile2, :bottom), do: can_connect(tile2, tile1, :top)
+  defp find_possible_corners(
+         encoded_tiles: encoded_tiles,
+         encoding_map: encoding_map,
+         pos: {vertical, horizontal}
+       ) do
+    Enum.flat_map(encoded_tiles, fn {name, orientations} ->
+      orientation =
+        Enum.find(orientations, fn orientation ->
+          vertical_encoding = Keyword.fetch!(orientation, vertical)
+          horizontal_encoding = Keyword.fetch!(orientation, horizontal)
+
+          Map.fetch!(encoding_map, vertical_encoding) == MapSet.new([name]) and
+            Map.fetch!(encoding_map, horizontal_encoding) == MapSet.new([name])
+        end)
+
+      (orientation && [{name, orientation}]) || []
+    end)
+  end
 
   def rotate_right(tile) do
     # abc
