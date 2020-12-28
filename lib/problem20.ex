@@ -29,6 +29,132 @@ defmodule Advent2020.Problem20 do
     end
   end
 
+  def run(:part2) do
+    encoded_tiles =
+      load()
+      |> Enum.map(fn {name, tile} ->
+        {name, get_encoded_orientations(tile)}
+      end)
+      |> Enum.into(%{})
+
+    encoding_map = create_encoding_map(encoded_tiles)
+
+    top_left =
+      find_possible_corners(
+        encoded_tiles: encoded_tiles,
+        encoding_map: encoding_map,
+        pos: {:top, :left}
+      )
+      # To match up with the sample input of 1951
+      |> Enum.at(1)
+
+    grid = %{{0, 0} => top_left}
+    remaining_tiles = Map.delete(encoded_tiles, elem(top_left, 0))
+    board_length = Enum.count(encoded_tiles) |> :math.sqrt() |> floor()
+
+    solve(%{
+      remaining_tiles: remaining_tiles,
+      grid: grid,
+      encoding_map: encoding_map,
+      board_length: board_length,
+      pos: {1, 0}
+    })
+  end
+
+  defp solve(%{
+         grid: grid,
+         board_length: board_length,
+         pos: {0, board_length}
+       }) do
+    grid
+  end
+
+  defp solve(%{
+         remaining_tiles: remaining_tiles,
+         grid: grid,
+         encoding_map: encoding_map,
+         board_length: board_length,
+         pos: {x, y}
+       }) do
+    IO.inspect(grid)
+
+    left_edge =
+      Map.get(grid, {x - 1, y}, {nil, []})
+      |> elem(1)
+      |> Keyword.get(:right, nil)
+
+    top_edge =
+      Map.get(grid, {x, y - 1}, {nil, []})
+      |> elem(1)
+      |> Keyword.get(:bottom, nil)
+
+    possible_tiles =
+      find_matches(%{
+        remaining_tiles: remaining_tiles,
+        encoding_map: encoding_map,
+        encoding: left_edge,
+        direction: :left
+      })
+
+    possible_tiles =
+      find_matches(%{
+        remaining_tiles: possible_tiles,
+        encoding_map: encoding_map,
+        encoding: top_edge,
+        direction: :top
+      })
+
+    Enum.find_value(possible_tiles, nil, fn {name, orientations} ->
+      Enum.find_value(orientations, nil, fn orientation ->
+        grid = Map.put(grid, {x, y}, {name, orientation})
+        remaining_tiles = Map.delete(remaining_tiles, name)
+        new_x = (x == board_length - 1 && 0) || x + 1
+        new_y = (x == board_length - 1 && y + 1) || y
+
+        solve(%{
+          remaining_tiles: remaining_tiles,
+          grid: grid,
+          encoding_map: encoding_map,
+          board_length: board_length,
+          pos: {new_x, new_y}
+        })
+      end)
+    end)
+  end
+
+  defp find_matches(%{encoding: nil, remaining_tiles: remaining_tiles}) do
+    remaining_tiles
+  end
+
+  defp find_matches(%{
+         remaining_tiles: remaining_tiles,
+         encoding_map: encoding_map,
+         encoding: encoding,
+         direction: direction
+       }) do
+    Map.fetch!(encoding_map, encoding)
+    |> Enum.map(fn
+      name when :erlang.is_map_key(name, remaining_tiles) ->
+        matching_orientations =
+          Map.fetch!(remaining_tiles, name)
+          |> Enum.filter(fn orientation ->
+            Keyword.fetch!(orientation, direction) == encoding
+          end)
+
+        {name, matching_orientations}
+
+      name ->
+        {name, []}
+    end)
+    |> Enum.reject(fn
+      {_, []} -> true
+      _ -> false
+    end)
+    |> Enum.reduce(%{}, fn {name, orientations}, acc ->
+      Map.update(acc, name, orientations, &(orientations ++ &1))
+    end)
+  end
+
   def load() do
     File.read('input20.txt')
     |> elem(1)
