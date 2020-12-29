@@ -2,63 +2,36 @@ defmodule Advent2020.Problem20 do
   @tile_length 10
 
   def run(:part1) do
-    encoded_tiles =
-      load()
-      |> Enum.map(fn {name, tile} ->
-        {name, get_encoded_orientations(tile)}
-      end)
-      |> Enum.into(%{})
+    tiles = load()
+    board_length = square_length(tiles)
+    grid = solve(%{tiles: tiles, board_length: board_length})
 
-    encoding_map = create_encoding_map(encoded_tiles)
-
-    top_left =
-      find_possible_corners(
-        encoded_tiles: encoded_tiles,
-        encoding_map: encoding_map,
-        pos: {:top, :left}
-      )
-
-    # Because you can rotate the tiles right, there are 4 identical permutations
-    # Therefore, there should be 4 tiles that match the top left corner, which in
-    # actuality are the 4 tiles for each corner
-    if Enum.count(top_left) == 4 do
-      Enum.map(top_left, &elem(&1, 0))
-      |> Enum.reduce(fn a, b -> a * b end)
-    else
-      nil
-    end
+    [{0, 0}, {board_length - 1, 0}, {0, board_length - 1}, {board_length - 1, board_length - 1}]
+    |> Enum.map(&Map.fetch!(grid, &1))
+    |> Enum.map(&elem(&1, 0))
+    |> Enum.reduce(fn a, b -> a * b end)
   end
 
   def run(:part2) do
-    encoded_tiles =
-      load()
-      |> Enum.map(fn {name, tile} ->
-        {name, get_encoded_orientations(tile)}
-      end)
-      |> Enum.into(%{})
+    tiles = load()
 
-    encoding_map = create_encoding_map(encoded_tiles)
+    image =
+      solve(%{tiles: tiles, board_length: square_length(tiles)})
+      |> reconstitute(tiles)
+      |> remove_border()
+      |> combine()
 
-    top_left =
-      find_possible_corners(
-        encoded_tiles: encoded_tiles,
-        encoding_map: encoding_map,
-        pos: {:top, :left}
-      )
-      # To match up with the sample input of 1951
-      |> Enum.at(1)
+    image_length = square_length(image)
 
-    grid = %{{0, 0} => top_left}
-    remaining_tiles = Map.delete(encoded_tiles, elem(top_left, 0))
-    board_length = Enum.count(encoded_tiles) |> :math.sqrt() |> floor()
-
-    solve(%{
-      remaining_tiles: remaining_tiles,
-      grid: grid,
-      encoding_map: encoding_map,
-      board_length: board_length,
-      pos: {1, 0}
-    })
+    get_orientations(image, image_length)
+    |> Enum.find_value(fn image ->
+      case get_sea_monsters(image, image_length) do
+        {_image, 0} -> nil
+        {image, _} -> image
+      end
+    end)
+    |> Map.values()
+    |> Enum.count(&(&1 == true))
   end
 
   defp solve(%{
@@ -76,8 +49,6 @@ defmodule Advent2020.Problem20 do
          board_length: board_length,
          pos: {x, y}
        }) do
-    IO.inspect(grid)
-
     left_edge =
       Map.get(grid, {x - 1, y}, {nil, []})
       |> elem(1)
@@ -122,6 +93,36 @@ defmodule Advent2020.Problem20 do
     end)
   end
 
+  defp solve(%{tiles: tiles, board_length: board_length}) do
+    encoded_tiles =
+      Enum.map(tiles, fn {name, tile} ->
+        {name, get_encoded_orientations(tile, @tile_length)}
+      end)
+      |> Enum.into(%{})
+
+    encoding_map = create_encoding_map(encoded_tiles)
+
+    top_left =
+      find_possible_corners(
+        encoded_tiles: encoded_tiles,
+        encoding_map: encoding_map,
+        pos: {:top, :left}
+      )
+      # To match up with the sample input of 1951
+      |> Enum.at(1)
+
+    grid = %{{0, 0} => top_left}
+    remaining_tiles = Map.delete(encoded_tiles, elem(top_left, 0))
+
+    solve(%{
+      remaining_tiles: remaining_tiles,
+      grid: grid,
+      encoding_map: encoding_map,
+      board_length: board_length,
+      pos: {1, 0}
+    })
+  end
+
   defp find_matches(%{encoding: nil, remaining_tiles: remaining_tiles}) do
     remaining_tiles
   end
@@ -155,12 +156,71 @@ defmodule Advent2020.Problem20 do
     end)
   end
 
+  defp reconstitute(grid, tiles) do
+    Enum.map(grid, fn {pos, {name, encoded_orientation}} ->
+      tile =
+        Map.fetch!(tiles, name)
+        |> get_orientations(@tile_length)
+        |> Enum.find(fn tile ->
+          encode_tile(tile)
+          |> Keyword.equal?(encoded_orientation)
+        end)
+
+      {pos, {name, tile}}
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp remove_border(grid) do
+    Enum.map(grid, fn {pos, {name, tile}} ->
+      new_tile =
+        Enum.reduce(0..(@tile_length - 1), tile, fn i, tile ->
+          Map.delete(tile, {i, 0})
+          |> Map.delete({i, @tile_length - 1})
+          |> Map.delete({0, i})
+          |> Map.delete({@tile_length - 1, i})
+        end)
+        |> Enum.map(fn {{x, y}, val} -> {{x - 1, y - 1}, val} end)
+        |> Enum.into(%{})
+
+      {pos, {name, new_tile}}
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp combine(grid) do
+    board_length = Enum.count(grid) |> :math.sqrt() |> floor()
+    # We have removed the border on each side, so remember to use the
+    # new tile length
+    tile_length = @tile_length - 2
+
+    for y <- 0..(board_length * tile_length - 1) do
+      grid_y = Integer.floor_div(y, tile_length)
+      inner_y = rem(y, tile_length)
+
+      for x <- 0..(board_length * tile_length - 1) do
+        grid_x = Integer.floor_div(x, tile_length)
+        inner_x = rem(x, tile_length)
+
+        value =
+          Map.fetch!(grid, {grid_x, grid_y})
+          |> elem(1)
+          |> Map.fetch!({inner_x, inner_y})
+
+        {{x, y}, value}
+      end
+    end
+    |> List.flatten()
+    |> Enum.into(%{})
+  end
+
   def load() do
     File.read('input20.txt')
     |> elem(1)
     |> String.split("\n\n")
     |> Enum.reject(&(&1 == ""))
     |> Enum.map(&parse/1)
+    |> Enum.into(%{})
   end
 
   defp parse(entry) do
@@ -194,14 +254,26 @@ defmodule Advent2020.Problem20 do
     end
   end
 
-  defp get_orientations(tile) do
-    Enum.reduce(1..3, [tile], fn _, [tile | tiles] ->
-      new_tile = rotate_right(tile)
-      [new_tile, tile | tiles]
+  defp get_flipped_orientations(tile, tile_length) do
+    [
+      tile,
+      flip(tile, tile_length, :horizontal),
+      flip(tile, tile_length, :vertical),
+      flip(flip(tile, tile_length, :horizontal), tile_length, :vertical)
+    ]
+  end
+
+  defp get_rotated_orientations(tile, tile_length) do
+    Enum.reduce(1..3, [tile], fn _, tiles ->
+      new_tile = rotate_right(hd(tiles), tile_length)
+      [new_tile | tiles]
     end)
-    |> Enum.flat_map(fn tile ->
-      [tile, flip(tile, :horizontal), flip(tile, :vertical)]
-    end)
+  end
+
+  defp get_orientations(tile, tile_length) do
+    get_rotated_orientations(tile, tile_length)
+    |> Enum.flat_map(&get_flipped_orientations(&1, tile_length))
+    |> Enum.uniq()
   end
 
   defp encode_tile(tile) do
@@ -228,8 +300,8 @@ defmodule Advent2020.Problem20 do
     end)
   end
 
-  defp get_encoded_orientations(tile) do
-    get_orientations(tile)
+  defp get_encoded_orientations(tile, tile_length) do
+    get_orientations(tile, tile_length)
     |> Enum.map(&encode_tile/1)
     |> Enum.uniq()
   end
@@ -265,7 +337,7 @@ defmodule Advent2020.Problem20 do
     end)
   end
 
-  def rotate_right(tile) do
+  def rotate_right(tile, tile_length) do
     # abc
     # def
     # ghi
@@ -274,23 +346,23 @@ defmodule Advent2020.Problem20 do
     # gda
     # heb
     # ifc
-    for y <- (@tile_length - 1)..0 do
-      for x <- 0..(@tile_length - 1) do
-        Map.fetch!(tile, {x, y})
-      end
-    end
-    |> Enum.with_index()
-    |> Enum.map(fn {row, y} ->
-      Enum.with_index(row)
-      |> Enum.map(fn {val, x} -> {{x, y}, val} end)
+
+    # rotated right again becomes
+    # i h g
+    # f e d
+    # c b a
+
+    Enum.map(tile, fn {{x, y}, val} ->
+      new_x = tile_length - 1 - y
+      new_y = x
+      {{new_x, new_y}, val}
     end)
-    |> List.flatten()
     |> Enum.into(%{})
   end
 
-  def flip(tile, :horizontal) do
+  def flip(tile, tile_length, :horizontal) do
     Enum.into(tile, %{}, fn {{x, y}, val} ->
-      new_x = @tile_length - 1 - x
+      new_x = tile_length - 1 - x
       {{new_x, y}, val}
     end)
 
@@ -304,9 +376,9 @@ defmodule Advent2020.Problem20 do
     # ihg
   end
 
-  def flip(tile, :vertical) do
+  def flip(tile, tile_length, :vertical) do
     Enum.into(tile, %{}, fn {{x, y}, val} ->
-      new_y = @tile_length - 1 - y
+      new_y = tile_length - 1 - y
       {{x, new_y}, val}
     end)
 
@@ -318,5 +390,52 @@ defmodule Advent2020.Problem20 do
     # ghi
     # def
     # abc
+  end
+
+  defp square_length(items) do
+    Enum.count(items) |> :math.sqrt() |> floor()
+  end
+
+  defp get_sea_monsters(image, image_length) do
+    # |                  #
+    # |#    ##    ##    ###
+    # | #  #  #  #  #  #
+    indices = [
+      {18, 0},
+      {0, 1},
+      {5, 1},
+      {6, 1},
+      {11, 1},
+      {12, 1},
+      {17, 1},
+      {18, 1},
+      {19, 1},
+      {1, 2},
+      {4, 2},
+      {7, 2},
+      {10, 2},
+      {13, 2},
+      {16, 2}
+    ]
+
+    Enum.reduce(0..(image_length - 1), {image, 0}, fn y, {image, count} ->
+      Enum.reduce(0..(image_length - 1), {image, count}, fn x, {image, count} ->
+        Enum.all?(indices, fn {offset_x, offset_y} ->
+          Map.get(image, {x + offset_x, y + offset_y}) == true
+        end)
+        |> case do
+          true ->
+            image =
+              Enum.reduce(indices, image, fn {offset_x, offset_y}, image ->
+                Map.put(image, {x + offset_x, y + offset_y}, :sea_monster)
+              end)
+
+            {image, count + 1}
+
+          false ->
+            {image, count}
+        end
+      end)
+    end)
   end
 end
